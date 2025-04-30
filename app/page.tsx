@@ -8,6 +8,7 @@ import IterationSlider from "@/components/iteration-slider"
 import AttributeMatrix from "@/components/attribute-matrix"
 import { MathFormula } from "@/components/math-formula"
 import { blobImageUrls } from "@/lib/blob-storage"
+import ImageGenerator from "@/components/image-generator"
 
 export default function Home() {
   return (
@@ -396,6 +397,9 @@ export default function Home() {
             </div>
             <div className="mt-12">
               <CreativeCanvas />
+            </div>
+            <div className="mt-12">
+              <ImageGenerator />
             </div>
           </div>
         </section>
