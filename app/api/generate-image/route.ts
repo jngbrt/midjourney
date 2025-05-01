@@ -39,8 +39,10 @@ export async function POST(request: Request) {
     try {
       console.log("Attempting to generate image with OpenAI API using fetch...")
       console.log("Using prompt:", prompt.substring(0, 50) + "...")
+      console.log("Using model: gpt-image-1")
 
       // Use fetch API directly instead of OpenAI SDK
+      // Note: gpt-image-1 always returns base64-encoded images
       const response = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: {
@@ -48,12 +50,14 @@ export async function POST(request: Request) {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "dall-e-3",
+          model: "gpt-image-1",
           prompt: prompt,
           n: 1,
-          size: "1024x1024",
-          quality: "standard",
-          response_format: "url",
+          size: "1024x1024", // Can be 1024x1024, 1536x1024, 1024x1536, or auto
+          quality: "high", // Can be high, medium, or low for gpt-image-1
+          output_format: "png", // png, jpeg, or webp
+          // Note: response_format is not supported for gpt-image-1
+          // It always returns base64-encoded images
         }),
       })
 
@@ -66,25 +70,31 @@ export async function POST(request: Request) {
       }
 
       const data = await response.json()
-      console.log("OpenAI API response received:", JSON.stringify(data, null, 2))
+      console.log("OpenAI API response received with data structure:", Object.keys(data).join(", "))
 
-      // Get the URL from the response
-      const imageUrl = data.data[0].url
+      // Get the base64 image data from the response
+      // gpt-image-1 always returns base64-encoded images in b64_json format
+      const base64ImageData = data.data[0].b64_json
 
-      if (!imageUrl) {
-        throw new Error("No image URL returned from OpenAI")
+      if (!base64ImageData) {
+        throw new Error("No base64 image data returned from OpenAI")
       }
 
-      console.log("Image URL received:", imageUrl)
+      console.log("Base64 image data received (length):", base64ImageData.length)
 
-      // Fetch the image from the URL
-      const imageResponse = await fetch(imageUrl)
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to fetch image from OpenAI URL: ${imageResponse.status}`)
+      // Convert base64 to blob
+      const byteCharacters = atob(base64ImageData)
+      const byteArrays = []
+      for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
+        const slice = byteCharacters.slice(offset, offset + 1024)
+        const byteNumbers = new Array(slice.length)
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        byteArrays.push(byteArray)
       }
-
-      // Get the image as a blob
-      const imageBlob = await imageResponse.blob()
+      const imageBlob = new Blob(byteArrays, { type: "image/png" })
 
       // Create a unique filename
       const filename = `generated-image-${Date.now()}.png`
@@ -101,7 +111,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         imageUrl: blob.url,
-        prompt: data.data[0].revised_prompt || prompt,
+        prompt: prompt, // gpt-image-1 doesn't provide a revised_prompt like dall-e-3
       })
     } catch (openaiError: any) {
       console.error("OpenAI API error:", openaiError)
