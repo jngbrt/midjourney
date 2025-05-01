@@ -58,12 +58,10 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
-    "ws": "latest",
     "katex": "latest",
     "@vercel/blob": "latest",
     "ai": "latest",
-    "@ai-sdk/openai": "latest",
-    "openai": "latest"
+    "@ai-sdk/openai": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
