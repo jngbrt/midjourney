@@ -18,7 +18,9 @@ export function ImageGenerator() {
   const [generatedPrompt, setGeneratedPrompt] = useState("")
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [activeTab, setActiveTab] = useState("parameters")
-  const [isFallbackImage, setIsFallbackImage] = useState(false)
+  const [isSampleImage, setIsSampleImage] = useState(false)
+  const [fallbackReason, setFallbackReason] = useState("")
+  const [requestCount, setRequestCount] = useState(0) // Add a counter to force re-fetch
 
   // Creative parameters
   const [subject, setSubject] = useState(0.7)
@@ -53,7 +55,9 @@ export function ImageGenerator() {
 
   const generateImage = async () => {
     setIsGeneratingImage(true)
-    setIsFallbackImage(false)
+    setIsSampleImage(false)
+    setFallbackReason("")
+    setRequestCount((prev) => prev + 1) // Increment counter to avoid caching issues
 
     try {
       // Generate a prompt based on parameters or use custom prompt
@@ -141,11 +145,17 @@ export function ImageGenerator() {
         prompt = `Create a photorealistic advertising image of ${selectedSubject} depicted as a ${selectedStyle} in a ${selectedMood} tone, featuring ${selectedDetail} ${selectedContext}${twist}. Make it extremely high quality, suitable for professional advertising.`
       }
 
+      // Add a cache-busting parameter to avoid browser caching
+      const cacheBuster = new Date().getTime()
+
       // Call the API route to generate the image
-      const response = await fetch("/api/generate-image", {
+      const response = await fetch(`/api/generate-image?cb=${cacheBuster}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
         body: JSON.stringify({ prompt }),
       })
@@ -157,15 +167,23 @@ export function ImageGenerator() {
       const data = await response.json()
 
       if (data.success) {
-        setGeneratedImageUrl(data.imageUrl)
+        // Add a cache-busting parameter to the image URL if it's not already a blob URL
+        const imageUrl = data.imageUrl.includes("?")
+          ? `${data.imageUrl}&cb=${cacheBuster}`
+          : `${data.imageUrl}?cb=${cacheBuster}`
+
+        setGeneratedImageUrl(imageUrl)
         setGeneratedPrompt(data.prompt)
-        setIsFallbackImage(!!data.fallback)
+        setIsSampleImage(!!data.isSample)
+        if (data.fallbackReason) {
+          setFallbackReason(data.fallbackReason)
+        }
         setActiveTab("result")
 
-        if (data.fallback) {
+        if (data.isSample) {
           toast({
             title: "Using sample image",
-            description: "The AI image generation is currently unavailable. Showing a sample image instead.",
+            description: `${data.fallbackReason || "Image generation service is currently limited"}. Showing a sample image.`,
             variant: "default",
           })
         } else {
@@ -181,9 +199,13 @@ export function ImageGenerator() {
       console.error("Error generating image:", error)
 
       // Use a fallback image from our blob storage
-      setGeneratedImageUrl(blobImageUrls.element1)
+      const fallbackImage =
+        blobImageUrls.element1 ||
+        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop"
+      setGeneratedImageUrl(fallbackImage)
       setGeneratedPrompt(useCustomPrompt ? customPrompt : "Sample image shown due to generation error")
-      setIsFallbackImage(true)
+      setIsSampleImage(true)
+      setFallbackReason(error instanceof Error ? error.message : "Unknown error")
       setActiveTab("result")
 
       toast({
@@ -345,13 +367,13 @@ export function ImageGenerator() {
               {generatedImageUrl ? (
                 <>
                   <Image
-                    src={generatedImageUrl || "/placeholder.svg"}
+                    src={`${generatedImageUrl}${generatedImageUrl.includes("?") ? "&" : "?"}v=${requestCount}`}
                     alt="Generated creative image"
                     fill
                     className="object-cover"
                     unoptimized
                   />
-                  {isFallbackImage && (
+                  {isSampleImage && (
                     <div className="absolute bottom-2 right-2">
                       <Badge variant="outline" className="bg-yellow-500/20 text-yellow-700">
                         <AlertTriangle className="h-3 w-3 mr-1" /> Sample Image
@@ -378,11 +400,12 @@ export function ImageGenerator() {
                 </div>
               )}
 
-              {isFallbackImage && (
+              {isSampleImage && (
                 <div className="mb-4 p-2 rounded-md bg-yellow-50 border border-yellow-200">
                   <p className="text-xs text-yellow-700 flex items-center">
                     <AlertTriangle className="h-3 w-3 mr-1 flex-shrink-0" />
-                    This is a sample image. The AI image generation service is currently unavailable.
+                    This is a sample image.
+                    {fallbackReason && ` Reason: ${fallbackReason}`}
                   </p>
                 </div>
               )}
