@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
+import OpenAI from "openai"
 
 export async function GET() {
   try {
-    // Log API key information (masked for security)
+    // Log the environment variable (with partial masking for security)
     const apiKey = process.env.OPENAI_API_KEY || ""
     const maskedKey =
       apiKey.length > 8 ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : "(not found)"
+
     console.log(`API Key format check: ${maskedKey}`)
     console.log(`API Key length: ${apiKey.length}`)
     console.log(`API Key starts with 'sk-': ${apiKey.startsWith("sk-")}`)
@@ -18,45 +20,42 @@ export async function GET() {
       })
     }
 
-    console.log("Attempting direct fetch to OpenAI API...")
+    // Initialize OpenAI client
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
 
-    // Test with a simple completion request using fetch
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
+    console.log("Attempting to connect to OpenAI API...")
+
+    // Test the API key with a simple completion
+    try {
+      const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [{ role: "user", content: "Hello!" }],
         max_tokens: 5,
-      }),
-    })
+      })
 
-    console.log("OpenAI API response status:", response.status)
-
-    if (!response.ok) {
-      const errorData = await response.text()
-      console.error("OpenAI API error response:", errorData)
+      console.log("OpenAI API connection successful")
 
       return NextResponse.json({
-        success: false,
-        error: `OpenAI API returned status ${response.status}`,
-        details: errorData,
+        success: true,
+        message: "OpenAI API key is valid",
+        response: completion.choices[0].message,
       })
+    } catch (apiError: any) {
+      console.error("OpenAI API specific error:", apiError.message)
+      console.error("Error status:", apiError.status)
+      console.error("Error type:", apiError.type)
+
+      if (apiError.response) {
+        console.error("Response status:", apiError.response.status)
+        console.error("Response data:", apiError.response.data)
+      }
+
+      throw apiError
     }
-
-    const data = await response.json()
-    console.log("OpenAI API response data:", JSON.stringify(data, null, 2))
-
-    return NextResponse.json({
-      success: true,
-      message: "Direct OpenAI API call successful",
-      response: data,
-    })
   } catch (error: any) {
-    console.error("Error in direct OpenAI API test:", error)
+    console.error("Error testing OpenAI API key:", error)
 
     return NextResponse.json({
       success: false,
